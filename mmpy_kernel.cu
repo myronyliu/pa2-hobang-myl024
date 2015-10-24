@@ -6,43 +6,76 @@
 #include "types.h"
 using namespace std;
 
-__global__ void matMul(int N, _DOUBLE_ *C, _DOUBLE_ *A, _DOUBLE_ *B) {
-    int bx = blockIdx.x;
-    int by = blockIdx.y;
+#define BLOCK_W 32
+#define BLOCK_H 32
 
-    int tx = threadIdx.x;
-    int ty = threadIdx.y;
-    int wA = N;
-    int wB = N;
-    const int BLOCK_SIZE = 32; //square
+// the A-block is square with dimensions: BLOCK_H x BLOCK_H
+// the B-block and C-block are rectangular with dimensions: BLOCK_H x BLOCK_W
+__global__ void matMul(int N, _DOUBLE_ *C, _DOUBLE_ *A, _DOUBLE_ *B)
+{
+	int jBlock = blockIdx.x;
+	int iBlock = blockIdx.y;
 
-    int aBegin = wA * BLOCK_SIZE * by;
-    int aEnd   = aBegin + wA - 1;
-    int aStep  = BLOCK_SIZE;
-    int bBegin = BLOCK_SIZE * bx;
-    int bStep  = BLOCK_SIZE * wB;
+	int iThread = threadIdx.x; // each block's has BLOCK_H threads (one for each row of the C-block)
 
-    _DOUBLE_ Csub = 0;
+	int AsBegin = N * BLOCK_H * iBlock;
+	int AsStep  = BLOCK_H;
 
-    for (int a = aBegin, b = bBegin; a <= aEnd; a += aStep, b += bStep)
-    {
-		__shared__ _DOUBLE_ As[BLOCK_SIZE][BLOCK_SIZE];
-    	__shared__ _DOUBLE_ Bs[BLOCK_SIZE][BLOCK_SIZE];
+	int BsBegin = BLOCK_W * jBlock;
+	int BsStep  = BLOCK_H * N;
 
-        As[ty][tx] = A[a + wA * ty + tx];
-        Bs[ty][tx] = B[b + wB * ty + tx];
+	__shared__ _DOUBLE_ As[BLOCK_H][BLOCK_H]; // 'As' holds the A-block 
 
-        __syncthreads();
+	_DOUBLE_ b[BLOCK_W]; // 'b' holds a row of the B-block
+	_DOUBLE_ c[BLOCK_W]; // we compute a row of the C-block and put the result in 'c' temporarily
+
+	#pragma unroll
+	for (int j = 0; j < BLOCK_W; ++j) // initialize c[] to a row vector of all zeroes
+	{
+		c[j] = 0;
+	}
+
+	//////////////////////////////////////
+	//// Perform the blocked multiply ////
+	//////////////////////////////////////
+
+	for (	int AsIndex = AsBegin, BsIndex = BsBegin;
+			AsIndex <= AsBegin + N - 1;
+			AsIndex += AsStep, BsIndex += BsStep
+		)
+	{
+		// Load a '1 by BLOCK_W' vector of the B-block 
+		// Load a 'BLOCK_H by BLOCK_H' block of A 
+		// These access global memory, so we want successive j's to correspond to contiguous memory
+		for (int j = 0; j < BLOCK_W; ++j)
+		{
+			b[j] = B[BsIndex + N * iThread + j];
+		}
+		for (int j = 0; j < BLOCK_H; ++j)
+		{
+			As[j][iThread] = A[AsIndex + N * iThread + j]; // transpose to avoid 'bank conflict'
+		}
+		__syncthreads();
 
 		#pragma unroll
-        for (int k = 0; k < BLOCK_SIZE; ++k)
-        {
-            Csub += As[ty][k] * Bs[k][tx];
-        }
+		for (int j = 0; j < BLOCK_H; ++j) // for each element in a row of As
+		{
+			#pragma unroll
+			for (int jj = 0; jj < BLOCK_W; ++jj)
+			{
+				c[jj] += As[j][iThread] * b[jj];
+			}
+		}
+		__syncthreads();
+	}
 
-        __syncthreads();
-    }
+	////////////////////////////
+	//// Copy c back into C ////
+	////////////////////////////
 
-    int c = wB * BLOCK_SIZE * by + BLOCK_SIZE * bx;
-    C[c + wB * ty + tx] = Csub;
+	#pragma unroll
+	for (int j = 0; j < BLOCK_W; ++j)
+	{
+		C[N * (BLOCK_H * iBlock + iThread) + BLOCK_W * jBlock + j] = c[j];
+	}
 }

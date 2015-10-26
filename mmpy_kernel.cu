@@ -6,8 +6,9 @@
 #include "types.h"
 using namespace std;
 
-#define BLOCK_W 32
-#define BLOCK_H 32
+// The effective block size, in actuality we only have BLOCK_H threads
+#define BLOCK_W 64
+#define BLOCK_H 16
 
 // the A-block is square with dimensions: BLOCK_H x BLOCK_H
 // the B-block and C-block are rectangular with dimensions: BLOCK_H x BLOCK_W

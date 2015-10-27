@@ -7,6 +7,7 @@
 using namespace std;
 
 // The effective block size, in actuality we only have BLOCK_H threads
+
 #define BLOCK_W 16 
 #define BLOCK_H 64 
 
@@ -15,49 +16,46 @@ __global__ void matMul(int N, _DOUBLE_ *C, _DOUBLE_ *A, _DOUBLE_ *B)
 	int jBlock = blockIdx.x;
 	int iBlock = blockIdx.y;
 
-	int iThread = threadIdx.x; // each block's has BLOCK_W threads (one for each column of the C-block)
+	int iThread = threadIdx.x; // each block's has BLOCK_H threads (one for each row of the C-block)
 
 	int AsBegin = (N * BLOCK_H) * iBlock;
-	int AsStep  = BLOCK_H;
+	int AsStep  = BLOCK_W;
 
 	int BsBegin = BLOCK_W * jBlock;
-	int BsStep  = BLOCK_H * N;
+	int BsStep  = BLOCK_W * N;
 
 	__shared__ _DOUBLE_ Bs[BLOCK_W][BLOCK_W]; // 'Bs' holds the shared, parallel-loaded, B-block 
 
 	_DOUBLE_ a; // the BLOCK_H a's (one for each thread), together hold a column of the A-block
-	_DOUBLE_ c[BLOCK_W]; // the BLOCK_H c's (one for each thread) accumulate into a block of C
-
-	#pragma unroll
-	for (int j = 0; j < BLOCK_W; ++j) // initialize c[] to a row vector of all zeroes
-	{
-		c[j] = 0;
-	}
+	_DOUBLE_ c[BLOCK_W] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
 	//////////////////////////////////////
 	//// Perform the blocked multiply ////
 	//////////////////////////////////////
 
 	for (	int AsIndex = AsBegin, BsIndex = BsBegin;
-			AsIndex < AsBegin + N;
-			AsIndex += AsStep, BsIndex += BsStep
-		)
+				AsIndex < AsBegin + N;
+				AsIndex += AsStep, BsIndex += BsStep	)
 	{
-		for (int j = 0; j < BLOCK_W; ++j) // load shared B block in parallel
-		{
-			Bs[j][iThread] = B[BsIndex + N*iThread + j]; // transpose to avoid 'bank conflict'
-		}
+		int Bi = iThread / BLOCK_W;
+		int Bj = iThread % BLOCK_W;
+
+		Bs[Bi     ][Bj] = B[BsIndex + N* Bi       + Bj];
+		Bs[Bi +  4][Bj] = B[BsIndex + N*(Bi +  4) + Bj];
+		Bs[Bi +  8][Bj] = B[BsIndex + N*(Bi +  8) + Bj];
+		Bs[Bi + 12][Bj] = B[BsIndex + N*(Bi + 12) + Bj];
+
 		__syncthreads();
 
 		#pragma unroll
-		for (int j = 0; j < BLOCK_W; ++j) // ... for each column of the A-block
+		for (int k = 0; k < BLOCK_W; ++k) // ... for each column of the A-block
 		{
-			a = A[AsIndex + N*iThread + j];
+			a = A[AsIndex + N*iThread + k];
 
 			#pragma unroll
-			for (int jj = 0; jj < BLOCK_W; ++jj) // accumulate a*Bs[:][iThread] into c[:]
+			for (int j = 0; j < BLOCK_W; ++j)
 			{
-				c[jj] += a * Bs[jj][iThread];
+				c[j] += a * Bs[k][j];
 			}
 		}
 		__syncthreads();

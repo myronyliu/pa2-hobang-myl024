@@ -6,34 +6,31 @@
 #include "types.h"
 using namespace std;
 
-// The effective block size, in actuality we only have BLOCK_W threads
-// NOTE: we stipulate that BLOCK_W must be divisible by BLOCK_w
-
-#define BLOCK_W 64 
-#define BLOCK_H 16 
+// The effective block size, in actuality we only have BLOCKDIM_X threads
+// NOTE: we stipulate that BLOCKDIM_X must be divisible by BLOCKDIM_Y
 
 __global__ void matMul(int N, _DOUBLE_ *C, _DOUBLE_ *A, _DOUBLE_ *B)
 {
 	int jBlock = blockIdx.x;
 	int iBlock = blockIdx.y;
 
-	int c_H = (iBlock == N/BLOCK_H) ? N%BLOCK_H : BLOCK_H;
+	int c_H = (iBlock == N/BLOCKDIM_Y) ? N%BLOCKDIM_Y : BLOCKDIM_Y;
 
 	int jThread = threadIdx.x;
 
-	int AsBegin = (N * BLOCK_H) * iBlock;
-	int AsStep  = BLOCK_H;
+	int AsBegin = (N * BLOCKDIM_Y) * iBlock;
+	int AsStep  = BLOCKDIM_Y;
 
-	int BsBegin = BLOCK_W * jBlock;
-	int BsStep  = BLOCK_H * N;
+	int BsBegin = BLOCKDIM_X * jBlock;
+	int BsStep  = BLOCKDIM_Y * N;
 
-	__shared__ _DOUBLE_ As[BLOCK_H][BLOCK_H];
+	__shared__ _DOUBLE_ As[BLOCKDIM_Y][BLOCKDIM_Y];
 
 	_DOUBLE_ b;
-	_DOUBLE_ c[BLOCK_H];
+	_DOUBLE_ c[BLOCKDIM_Y];
 
 	#pragma unroll
-	for (int i = 0; i < BLOCK_H; ++i)
+	for (int i = 0; i < BLOCKDIM_Y; ++i)
 	{
 		c[i] = 0;
 	}
@@ -46,16 +43,16 @@ __global__ void matMul(int N, _DOUBLE_ *C, _DOUBLE_ *A, _DOUBLE_ *B)
 				AsIndex < AsBegin + N;
 				AsIndex += AsStep, BsIndex += BsStep	)
 	{
-		int Ai = jThread / BLOCK_H;
-		int Aj = jThread % BLOCK_H;
+		int Ai = jThread / BLOCKDIM_Y;
+		int Aj = jThread % BLOCKDIM_Y;
 
 		int kMax = N - (AsIndex - AsBegin); // the range of the contraction index
-		kMax = (kMax < BLOCK_H) ? kMax : BLOCK_H;
+		kMax = (kMax < BLOCKDIM_Y) ? kMax : BLOCKDIM_Y;
 
 		if (Aj < kMax)
 		{
 			#pragma unroll
-			for (int i = 0; i < BLOCK_H; i += BLOCK_W/BLOCK_H)
+			for (int i = 0; i < BLOCKDIM_Y; i += BLOCKDIM_X/BLOCKDIM_Y)
 			{
 				As[Ai + i][Aj] = A[AsIndex + N*(Ai + i) + Aj];
 			}
@@ -63,7 +60,7 @@ __global__ void matMul(int N, _DOUBLE_ *C, _DOUBLE_ *A, _DOUBLE_ *B)
 		else
 		{
 			#pragma unroll
-			for (int i = 0; i < BLOCK_H; i += BLOCK_W/BLOCK_H)
+			for (int i = 0; i < BLOCKDIM_Y; i += BLOCKDIM_X/BLOCKDIM_Y)
 			{
 				As[Ai + i][Aj] = 0;
 			}
@@ -71,7 +68,7 @@ __global__ void matMul(int N, _DOUBLE_ *C, _DOUBLE_ *A, _DOUBLE_ *B)
 		__syncthreads();
 
 		#pragma unroll
-		for (int k = 0; k < BLOCK_H; ++k)
+		for (int k = 0; k < BLOCKDIM_Y; ++k)
 		{
 			// b is loaded from main memory.
 			// Between the threads in the warp, the loads are coalesced,
@@ -79,7 +76,7 @@ __global__ void matMul(int N, _DOUBLE_ *C, _DOUBLE_ *A, _DOUBLE_ *B)
 			b = (k < kMax) ? B[BsIndex + N*k + jThread] : 0;
 
 			#pragma unroll
-			for (int i = 0; i < BLOCK_H; ++i)
+			for (int i = 0; i < BLOCKDIM_Y; ++i)
 			{
 				// Since k appears in the least significant index of As[...][k],
 				// the threads in the warp will be distributed evenly among the banks
@@ -93,12 +90,12 @@ __global__ void matMul(int N, _DOUBLE_ *C, _DOUBLE_ *A, _DOUBLE_ *B)
 	//// Copy c back into C ////
 	////////////////////////////
 
-	if (BLOCK_W*jBlock + jThread < N)
+	if (BLOCKDIM_X*jBlock + jThread < N)
 	{
 		#pragma unroll
 		for (int i = 0; i < c_H; ++i)
 		{
-			C[N * (BLOCK_H * iBlock + i) + BLOCK_W * jBlock + jThread] = c[i];
+			C[N * (BLOCKDIM_Y * iBlock + i) + BLOCKDIM_X * jBlock + jThread] = c[i];
 		}
 	}
 }

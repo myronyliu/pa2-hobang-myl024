@@ -1,8 +1,8 @@
 void setGrid(int n, dim3 &blockDim, dim3 &gridDim)
 {
 	// set your block dimensions and grid dimensions here
-	gridDim.x = n / 16;
-	gridDim.y = n / 8;
+	gridDim.x = n / blockDim.x;
+	gridDim.y = n / blockDim.y;
 
 	if(n % blockDim.x != 0)
 	{
@@ -13,4 +13,6 @@ void setGrid(int n, dim3 &blockDim, dim3 &gridDim)
 	{
 		gridDim.y++;
 	}
+
+	blockDim.y = 1;
 }

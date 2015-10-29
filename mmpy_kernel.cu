@@ -8,8 +8,8 @@ using namespace std;
 
 // The effective block size, in actuality we only have BLOCK_W threads
 // NOTE: we stipulate that BLOCK_W must be divisible by BLOCK_w
-#define BLOCK_W 16 
-#define BLOCK_H 8 
+#define BLOCK_W 64 
+#define BLOCK_H 16 
 
 __global__ void matMul(int N, _DOUBLE_ *C, _DOUBLE_ *A, _DOUBLE_ *B)
 {

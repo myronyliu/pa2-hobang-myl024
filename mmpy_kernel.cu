@@ -6,28 +6,28 @@
 #include "types.h"
 using namespace std;
 
-// The effective block size, in actuality we only have BLOCK_H threads
+// The effective block size, in actuality we only have BLOCK_W threads
 
-#define BLOCK_W 16 
-#define BLOCK_H 64
+#define BLOCK_W 64 
+#define BLOCK_H 16
 
 __global__ void matMul(int N, _DOUBLE_ *C, _DOUBLE_ *A, _DOUBLE_ *B)
 {
 	int jBlock = blockIdx.x;
 	int iBlock = blockIdx.y;
 
-	int iThread = threadIdx.x; // each block's has BLOCK_H threads (one for each row of the C-block)
+	int jThread = threadIdx.x;
 
 	int AsBegin = (N * BLOCK_H) * iBlock;
-	int AsStep  = BLOCK_W;
+	int AsStep  = BLOCK_H;
 
 	int BsBegin = BLOCK_W * jBlock;
-	int BsStep  = BLOCK_W * N;
+	int BsStep  = BLOCK_H * N;
 
-	__shared__ _DOUBLE_ Bs[BLOCK_W][BLOCK_W + 1]; // 'Bs' holds the shared, parallel-loaded, B-block 
+	__shared__ _DOUBLE_ As[BLOCK_H][BLOCK_H + 1];
 
-	_DOUBLE_ a; // the BLOCK_H a's (one for each thread), together hold a column of the A-block
-	_DOUBLE_ c[BLOCK_W] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+	_DOUBLE_ b;
+	_DOUBLE_ c[BLOCK_H] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
 	//////////////////////////////////////
 	//// Perform the blocked multiply ////
@@ -37,44 +37,42 @@ __global__ void matMul(int N, _DOUBLE_ *C, _DOUBLE_ *A, _DOUBLE_ *B)
 				AsIndex < AsBegin + N;
 				AsIndex += AsStep, BsIndex += BsStep	)
 	{
-		int Bi = iThread / BLOCK_W;
-		int Bj = iThread % BLOCK_W;
+		int Ai = jThread / BLOCK_H;
+		int Aj = jThread % BLOCK_H;
 
-		Bs[Bj][Bi     ] = B[BsIndex + N* Bi       + Bj];
-		Bs[Bj][Bi +  4] = B[BsIndex + N*(Bi +  4) + Bj];
-		Bs[Bj][Bi +  8] = B[BsIndex + N*(Bi +  8) + Bj];
-		Bs[Bj][Bi + 12] = B[BsIndex + N*(Bi + 12) + Bj];
+		As[Ai     ][Aj] = A[AsIndex + N* Ai       + Aj];
+		As[Ai +  4][Aj] = A[AsIndex + N*(Ai +  4) + Aj];
+		As[Ai +  8][Aj] = A[AsIndex + N*(Ai +  8) + Aj];
+		As[Ai + 12][Aj] = A[AsIndex + N*(Ai + 12) + Aj];
 
 		__syncthreads();
 
 		#pragma unroll
-		for (int k = 0; k < BLOCK_W; ++k) // ... for each column of the A-block
+		for (int k = 0; k < BLOCK_H; ++k)
 		{
-			a = A[AsIndex + N*iThread + k];
+			// b is loaded from main memory.
+			// Between the threads in the warp, the loads are coalesced,
+			// since jThread has unit coefficient in B[... + jThread].
+			b = B[BsIndex + N*k + jThread];
 
-			c[0] += a * Bs[0][k];
-			c[1] += a * Bs[1][k];
-			c[2] += a * Bs[2][k];
-			c[3] += a * Bs[3][k];
-			c[4] += a * Bs[4][k];
-			c[5] += a * Bs[5][k];
-			c[6] += a * Bs[6][k];
-			c[7] += a * Bs[7][k];
-			c[8] += a * Bs[8][k];
-			c[9] += a * Bs[9][k];
-			c[10] += a * Bs[10][k];
-			c[11] += a * Bs[11][k];
-			c[12] += a * Bs[12][k];
-			c[13] += a * Bs[13][k];
-			c[14] += a * Bs[14][k];
-			c[15] += a * Bs[15][k];
-/*
-			#pragma unroll
-			for (int j = 0; j < BLOCK_W; ++j)
-			{
-				c[j] += a * Bs[k][j];
-			}
-*/
+			// Since k appears in the least significant index of As[...][k],
+			// the threads in the warp will be distributed evenly among the banks
+			c[ 0] += b * As[ 0][k];
+			c[ 1] += b * As[ 1][k];
+			c[ 2] += b * As[ 2][k];
+			c[ 3] += b * As[ 3][k];
+			c[ 4] += b * As[ 4][k];
+			c[ 5] += b * As[ 5][k];
+			c[ 6] += b * As[ 6][k];
+			c[ 7] += b * As[ 7][k];
+			c[ 8] += b * As[ 8][k];
+			c[ 9] += b * As[ 9][k];
+			c[10] += b * As[10][k];
+			c[11] += b * As[11][k];
+			c[12] += b * As[12][k];
+			c[13] += b * As[13][k];
+			c[14] += b * As[14][k];
+			c[15] += b * As[15][k];
 		}
 		__syncthreads();
 	}
@@ -84,8 +82,8 @@ __global__ void matMul(int N, _DOUBLE_ *C, _DOUBLE_ *A, _DOUBLE_ *B)
 	////////////////////////////
 
 	#pragma unroll
-	for (int j = 0; j < BLOCK_W; ++j)
+	for (int i = 0; i < BLOCK_H; ++i)
 	{
-		C[N * (BLOCK_H * iBlock + iThread) + BLOCK_W * jBlock + j] = c[j];
+		C[N * (BLOCK_H * iBlock + i) + BLOCK_W * jBlock + jThread] = c[i];
 	}
 }

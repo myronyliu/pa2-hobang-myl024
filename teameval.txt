@@ -12,30 +12,48 @@ worked together and what to write for the evaluation.
 
 (1) List the names of your team members:
 
-A:
+A: Honam Bang
 
  
-B:
+B: Myron Liu
 
  
  
 (2) Estimate how much time each team member devoted to this project, in HOURS.
 
   	                        A 	       B
-meetings 	  	  	 
-coding 	  	  	 
-writeup 	  	  	 
-planning (alone) 	  	  	 
-total (including meetings) 	  	  	 
+meetings 	                15         15 	  	 
+coding 	  	  	            25         25
+writeup 	  	  	        10         10
+planning (alone) 	  	  	15         15
+total (including meetings)  65         65	  	  	 
 
 
 (3) Describe 
   (a) what the major responsibilities of each team member were;
+	I would say that for this time, our cooperation works quite well since we
+have tried to meet and discuss whenever we are available, and do
+pair-prograaming aggressively. We first brainstormed some ideas together. Then we worked on the code
+together. Whenever we parted ways, we came up with a couple of small ideas that we
+could individually test out. We would then convene and discuss what seemed to
+work.
+
   (b) whether or not you completed the assignment;
+We totally complete the given all requirements of this assignment.
+
   (c) the major strengths and weaknesses in your team, e.g. how
       your team worked together;
+Our collaboration worked well for this time. We will keep working in the same
+way.
+
   (d) the lessons learned from these events;
+Don't underestimate the improvement by loop unrolling; Do consider bank
+conflicts when write code working in GPU device.
+ 
   (e) whether and how you plan to change the way your work together and
+So far so good. Nothing to be changed.
+
   (f) anything else that comes to mind.
-
-
+This assignment was very interesting since we hadn't used GPU before. By doing
+this assignment, we could learn how GPU and parallism works for computation.
+ 

@@ -93,7 +93,6 @@ main(int argc, char** argv) {
     _ntx = BLOCKDIM_X;
     _nty = BLOCKDIM_Y;
 #endif
-
     dim3 threads(_ntx, _nty,1);
     int numblocksX = n/_ntx;
     int numblocksY = n/_nty;
@@ -172,7 +171,7 @@ main(int argc, char** argv) {
         else
             verify( hostC,n,n, eps, "Host result");
 
-        if (n <= 8){
+        if (n <= 33){
             printf("\nC:\n");
             printMatrix( hostC, n,n);
         }
